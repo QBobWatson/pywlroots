@@ -68,3 +68,46 @@ class PixmanRegion32(Ptr):
         Wrapper around pixman_region32_not_empty
         """
         return lib.pixman_region32_not_empty(self._ptr)
+
+    def intersect_rect(self, other: PixmanRegion32,
+                       x: int, y: int, width: int, height: int) -> bool:
+        """
+        Wrapper around pixman_region32_intersect_rect
+        """
+        return lib.pixman_region32_intersect_rect(self._ptr, other._ptr, x, y, width, height)
+
+    def intersect(self, reg1: PixmanRegion32, reg2: PixmanRegion32) -> bool:
+        """
+        Wrapper around pixman_region32_intersect
+        """
+        return lib.pixman_region32_intersect(self._ptr, reg1._ptr, reg2._ptr)
+
+    def copy_from(self, other: PixmanRegion32) -> bool:
+        """
+        Wrapper around pixman_region32_copy
+        """
+        return lib.pixman_region32_copy(self._ptr, other._ptr)
+
+    def translate(self, x: int, y: int) -> None:
+        """
+        Wrapper around pixman_region32_translate
+        """
+        lib.pixman_region32_translate(self._ptr, x, y)
+
+    def scale(self, other: PixmanRegion32, scale: float) -> None:
+        """
+        Wrapper around wlr_region_scale
+        """
+        lib.wlr_region_scale(self._ptr, other._ptr, scale)
+
+    def scale_xy(self, other: PixmanRegion32, scale_x: float, scale_y: float) -> None:
+        """
+        Wrapper around wlr_region_scale_xy
+        """
+        lib.wlr_region_scale(self._ptr, other._ptr, scale_x, scale_y)
+
+    def expand(self, other: PixmanRegion32, distance: int) -> None:
+        """
+        Wrapper around wlr_region_expand
+        """
+        lib.wlr_region_scale(self._ptr, other._ptr, distance)

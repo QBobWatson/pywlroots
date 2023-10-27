@@ -155,6 +155,9 @@ bool wlr_render_texture(struct wlr_renderer *r, struct wlr_texture *texture,
     const float projection[static 9], int x, int y, float alpha);
 bool wlr_render_texture_with_matrix(struct wlr_renderer *r,
     struct wlr_texture *texture, const float matrix[static 9], float alpha);
+bool wlr_render_subtexture_with_matrix(struct wlr_renderer *r,
+    struct wlr_texture *texture, const struct wlr_fbox *box,
+    const float matrix[static 9], float alpha);
 
 void wlr_render_rect(struct wlr_renderer *r, const struct wlr_box *box,
     const float color[static 4], const float projection[static 9]);
@@ -180,6 +183,11 @@ const struct wlr_drm_format *wlr_drm_format_set_get(
 
 # wlr/render/wlr_texture.h
 CDEF += """
+struct wlr_texture {
+    uint32_t width, height;
+    ...;
+};
+
 struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
     uint32_t fmt, uint32_t stride, uint32_t width, uint32_t height,
     const void *data);
@@ -223,8 +231,18 @@ void wlr_box_transform(struct wlr_box *dest, const struct wlr_box *box,
 # types/wlr_buffer.h
 CDEF += """
 struct wlr_buffer {
+    int width, height;
     ...;
 };
+
+struct wlr_client_buffer {
+    struct wlr_buffer base;
+    struct wlr_texture *texture;
+    struct wlr_buffer *source;
+    ...;
+};
+
+struct wlr_client_buffer *wlr_client_buffer_get(struct wlr_buffer *buffer);
 
 void wlr_buffer_drop(struct wlr_buffer *buffer);
 
@@ -493,6 +511,11 @@ struct wlr_damage_ring {
     struct pixman_region32 current;
     ...;
 };
+
+void wlr_damage_ring_get_buffer_damage(struct wlr_damage_ring *ring,
+	int buffer_age, struct pixman_region32 *damage);
+
+void wlr_damage_ring_rotate(struct wlr_damage_ring *ring);
 """
 
 # types/wlr_data_control_v1.h
@@ -1063,6 +1086,18 @@ struct pixman_box32* pixman_region32_rectangles(struct pixman_region32 *region,
     int *n_rects);
 
 bool pixman_region32_not_empty(struct pixman_region32 *region);
+
+bool pixman_region32_copy(struct pixman_region32 *dest,
+    const struct pixman_region32 *source);
+
+void pixman_region32_translate(struct pixman_region32 *region, int x, int y);
+
+bool pixman_region32_intersect_rect(struct pixman_region32 *dest,
+    struct pixman_region32 *source,
+    int x, int y, unsigned int width, unsigned int height);
+
+bool pixman_region32_intersect(struct pixman_region32 *new_reg,
+    const struct pixman_region32 *reg1, const struct pixman_region32 *reg2);
 """
 
 # types/wlr_output.h
@@ -1798,6 +1833,13 @@ struct wlr_scene_buffer {
 
     wlr_scene_buffer_point_accepts_input_func_t point_accepts_input;
     struct wlr_scene_output *primary_output;
+
+    // private state...
+
+    struct wlr_texture *texture;
+    struct wlr_fbox src_box;
+    int dst_width, dst_height;
+    enum wl_output_transform transform;
     ...;
 };
 
@@ -2752,8 +2794,17 @@ void wrapped_log_init(enum wlr_log_importance verbosity, wrapped_log_func_t call
 
 # util/region.h
 CDEF += """
+void wlr_region_scale(struct pixman_region32 *dst, const struct pixman_region32 *src,
+	float scale);
+
+void wlr_region_scale_xy(struct pixman_region32 *dst, const struct pixman_region32 *src,
+	float scale_x, float scale_y);
+
 void wlr_region_transform(struct pixman_region32 *dst, struct pixman_region32 *src,
     enum wl_output_transform transform, int width, int height);
+
+void wlr_region_expand(struct pixman_region32 *dst, const struct pixman_region32 *src,
+	int distance);
 """
 
 # backend/headless.h

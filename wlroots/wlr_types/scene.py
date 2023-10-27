@@ -5,14 +5,20 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING, Callable, TypeVar
 
+from pywayland.protocol.wayland import WlOutput
+from pywayland.utils import wl_list_for_each
+
 from wlroots import Ptr, PtrHasData, ffi, lib
+from wlroots.util.box import Box
 from wlroots.util.region import PixmanRegion32
-from wlroots.wlr_types import Surface
+from wlroots.wlr_types import Surface, Buffer
+
+from .texture import Texture
 
 if TYPE_CHECKING:
-    from wlroots.util.box import Box
+    from typing import Iterator
     from wlroots.util.clock import Timespec
-    from wlroots.wlr_types import Buffer, Output, OutputLayout
+    from wlroots.wlr_types import Output, OutputLayout
     from wlroots.wlr_types.layer_shell_v1 import LayerSurfaceV1
     from wlroots.wlr_types.presentation_time import Presentation
     from wlroots.wlr_types.xdg_shell import XdgSurface
@@ -124,6 +130,16 @@ class SceneTree(PtrHasData):
         ptr = ffi.addressof(self._ptr.node)
         return SceneNode(ptr)
 
+    @property
+    def children(self) -> Iterator[SceneNode]:
+        for ptr in wl_list_for_each(
+                "struct wlr_scene_node *",
+                self._ptr.children,
+                "link",
+                ffi=ffi
+        ):
+            yield SceneNode(ptr)
+
     @classmethod
     def create(cls, parent: SceneTree) -> SceneTree:
         return SceneTree(lib.wlr_scene_tree_create(parent._ptr))
@@ -158,6 +174,32 @@ class SceneBuffer(Ptr):
     def node(self) -> SceneNode:
         ptr = ffi.addressof(self._ptr.node)
         return SceneNode(ptr)
+
+    @property
+    def buffer(self) -> Buffer | None:
+        ptr = self._ptr.buffer
+        return Buffer(ptr) if ptr != ffi.NULL else None
+
+    @property
+    def texture(self) -> Texture | None:
+        ptr = self._ptr.texture
+        return Texture(ptr) if ptr != ffi.NULL else None
+
+    @texture.setter
+    def texture(self, texture: Texture | None):
+        self._ptr.texture = ffi.NULL if texture is None else texture._ptr
+
+    @property
+    def transform(self) -> WlOutput.transform:
+        return WlOutput.transform(self._ptr.transform)
+
+    @property
+    def dst_width(self) -> int:
+        return self._ptr.dst_width
+
+    @property
+    def dst_height(self) -> int:
+        return self._ptr.dst_height
 
     def set_buffer(self, buffer: Buffer | None) -> None:
         buffer_ptr = buffer._ptr if buffer else ffi.NULL
@@ -207,8 +249,54 @@ class SceneNode(PtrHasData):
         return self._ptr.y
 
     @property
+    def visible(self) -> PixmanRegion32:
+        return PixmanRegion32(ffi.addressof(self._ptr.visible))
+
+    @property
+    def size(self) -> tuple[int, int]:
+        if self.type == SceneNodeType.RECT:
+            rect = self.as_rect
+            return rect.width, rect.height
+        if self.type == SceneNodeType.BUFFER:
+            scene_buffer = self.as_buffer
+            if scene_buffer.dst_width > 0 and scene_buffer.dst_height > 0:
+                return scene_buffer.dst_width, scene_buffer.dst_height
+            buffer = scene_buffer.buffer
+            if buffer:
+                if scene_buffer.transform & WlOutput.transform.transform_90:
+                    return buffer.height, buffer.width
+                else:
+                    return buffer.width, buffer.height
+        return 0, 0
+
+    @property
     def enabled(self) -> bool:
         return self._ptr.enabled
+
+    @property
+    def invisible(self) -> bool:
+        if self.type == SceneNodeType.TREE:
+            return True
+        elif self.type == SceneNodeType.RECT:
+            return self.as_rect.color[3] == 0.0
+        elif self.type == SceneNodeType.BUFFER:
+            return self.as_buffer.buffer is None
+        assert False
+
+    @property
+    def as_tree(self) -> SceneTree:
+        assert self.type == SceneNodeType.TREE
+        return SceneTree(ffi.cast("struct wlr_scene_tree *", self._ptr))
+
+    @property
+    def as_rect(self) -> SceneRect:
+        assert self.type == SceneNodeType.RECT
+        return SceneRect(ffi.cast("struct wlr_scene_rect *", self._ptr))
+
+    @property
+    def as_buffer(self) -> SceneBuffer:
+        assert self.type == SceneNodeType.BUFFER
+        return SceneBuffer(ffi.cast("struct wlr_scene_buffer *", self._ptr))
 
     def destroy(self) -> None:
         """Immediately destroy the scene-graph node."""
@@ -273,6 +361,17 @@ class SceneNode(PtrHasData):
             self._ptr, lib.buffer_iterator_callback, handle
         )
 
+    def coords(self) -> tuple[bool, int, int]:
+        """Get the node's layout-local coordinates.
+
+        The first entry of the return value is True if the node and all of its
+        ancestors are enabled.
+        """
+        x_ptr = ffi.new("int *")
+        y_ptr = ffi.new("int *")
+        enabled = lib.wlr_scene_node_coords(self._ptr, x_ptr, y_ptr)
+        return enabled, x_ptr[0], y_ptr[0]
+
 
 class SceneSurface(Ptr):
     def __init__(self, ptr) -> None:
@@ -292,17 +391,33 @@ class SceneSurface(Ptr):
 
 
 class SceneRect(Ptr):
-    def __init__(
-        self, parent: SceneTree, width: int, height: int, color: ffi.CData
-    ) -> None:
+    def __init__(self, ptr) -> None:
         """A scene-graph node displaying a solid-colored rectangle"""
-        self._ptr = lib.wlr_scene_rect_create(parent._ptr, width, height, color)
+        self._ptr = ptr
+
+    @classmethod
+    def create(cls, parent: SceneTree, width: int, height: int, color: ffi.CData) -> SceneRect:
+        ptr = lib.wlr_scene_rect_create(parent._ptr, width, height, color)
+        return SceneRect(ptr)
 
     @property
     def node(self) -> SceneNode:
         """struct wlr_scene_tree"""
         ptr = ffi.addressof(self._ptr.node)
         return SceneNode(ptr)
+
+    @property
+    def width(self) -> int:
+        return self._ptr.width
+
+    @property
+    def height(self) -> int:
+        return self._ptr.height
+
+    @property
+    def color(self) -> tuple[int, int, int, int]:
+        c = self._ptr.color
+        return c[0], c[1], c[2], c[3]
 
     def set_size(self, width: int, height: int) -> None:
         """Change the width and height of an existing rectangle node."""

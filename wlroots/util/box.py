@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from pywayland.protocol.wayland import WlOutput
+
 from wlroots import ffi, lib
 
 
@@ -59,3 +61,9 @@ class Box:
 
     def contains_point(self, x: float, y: float) -> bool:
         return lib.wlr_box_contains_point(self._ptr, x, y)
+
+    def transform(self, box: Box, transform: WlOutput.transform, width: int, height: int):
+        lib.wlr_box_transform(self._ptr, box._ptr, transform, width, height)
+
+    def intersection(self, box_a: Box, box_b: Box) -> bool:
+        return lib.wlr_box_intersection(self._ptr, box_a._ptr, box_b._ptr)
