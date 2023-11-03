@@ -118,6 +118,14 @@ class SceneOutput(Ptr):
         """Set the output's position in the scene-graph."""
         lib.wlr_scene_output_set_position(self._ptr, lx, ly)
 
+    @property
+    def x(self):
+        return self._ptr.x
+
+    @property
+    def y(self):
+        return self._ptr.y
+
 
 class SceneTree(PtrHasData):
     def __init__(self, ptr) -> None:

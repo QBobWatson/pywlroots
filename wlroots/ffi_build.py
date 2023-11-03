@@ -200,6 +200,45 @@ struct wlr_texture *wlr_texture_from_buffer(struct wlr_renderer *renderer,
     struct wlr_buffer *buffer);
 """
 
+# wlr/render/gles2.h
+CDEF += """
+struct wlr_renderer *wlr_gles2_renderer_create_with_drm_fd(int drm_fd);
+struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl);
+
+struct wlr_egl *wlr_gles2_renderer_get_egl(struct wlr_renderer *renderer);
+bool wlr_gles2_renderer_check_ext(struct wlr_renderer *renderer,
+	const char *ext);
+
+typedef int... GLuint;
+typedef int... GLenum;
+
+GLuint wlr_gles2_renderer_get_current_fbo(struct wlr_renderer *wlr_renderer);
+bool wlr_renderer_is_gles2(struct wlr_renderer *wlr_renderer);
+bool wlr_texture_is_gles2(struct wlr_texture *texture);
+
+struct wlr_gles2_texture_attribs {
+	GLenum target;
+	GLuint tex;
+
+	bool has_alpha;
+};
+
+void wlr_gles2_texture_get_attribs(struct wlr_texture *texture,
+	struct wlr_gles2_texture_attribs *attribs);
+"""
+
+# wlr/render/egl.h
+CDEF += """
+typedef void *EGLDisplay;
+typedef void *EGLContext;
+
+struct wlr_egl *wlr_egl_create_with_context(EGLDisplay display,
+	EGLContext context);
+
+EGLDisplay wlr_egl_get_display(struct wlr_egl *egl);
+EGLContext wlr_egl_get_context(struct wlr_egl *egl);
+"""
+
 # types/wlr_box.h
 CDEF += """
 struct wlr_box {
@@ -516,6 +555,7 @@ void wlr_damage_ring_get_buffer_damage(struct wlr_damage_ring *ring,
 	int buffer_age, struct pixman_region32 *damage);
 
 void wlr_damage_ring_rotate(struct wlr_damage_ring *ring);
+void wlr_damage_ring_add_whole(struct wlr_damage_ring *ring);
 """
 
 # types/wlr_data_control_v1.h
@@ -1085,6 +1125,8 @@ void pixman_region32_fini(struct pixman_region32 *region);
 struct pixman_box32* pixman_region32_rectangles(struct pixman_region32 *region,
     int *n_rects);
 
+struct pixman_box32* pixman_region32_extents(struct pixman_region32 *region);
+
 bool pixman_region32_not_empty(struct pixman_region32 *region);
 
 bool pixman_region32_copy(struct pixman_region32 *dest,
@@ -1098,6 +1140,12 @@ bool pixman_region32_intersect_rect(struct pixman_region32 *dest,
 
 bool pixman_region32_intersect(struct pixman_region32 *new_reg,
     const struct pixman_region32 *reg1, const struct pixman_region32 *reg2);
+
+bool pixman_region32_union(struct pixman_region32 *new_reg,
+    const struct pixman_region32 *reg1, const struct pixman_region32 *reg2);
+
+bool pixman_region32_union_rect(struct pixman_region32 *dest,
+    const struct pixman_region32 *source, int x, int y, int width, int height);
 """
 
 # types/wlr_output.h
@@ -1166,6 +1214,11 @@ struct wlr_output {
     struct wl_list cursors; // wlr_output_cursor::link
     struct wlr_output_cursor *hardware_cursor;
     int software_cursor_locks;
+
+    struct wlr_allocator *allocator;
+    struct wlr_renderer *renderer;
+    struct wlr_swapchain *swapchain;
+    struct wlr_buffer *back_buffer;
 
     struct wl_listener display_destroy;
 
@@ -1804,6 +1857,9 @@ struct wlr_scene {
     struct wlr_scene_tree tree;
     struct wl_list outputs;
     struct wlr_presentation *presentation;
+
+    // private...
+    bool calculate_visibility;
     ...;
 };
 
@@ -2834,6 +2890,8 @@ SOURCE = """
 #include <wlr/render/allocator.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/render/wlr_renderer.h>
+#include <wlr/render/gles2.h>
+#include <wlr/render/egl.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>

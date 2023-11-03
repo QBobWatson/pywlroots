@@ -21,7 +21,7 @@
       packages.x86_64-linux.default =
         let
           inherit (pkgs) pkg-config libinput libxkbcommon pixman
-            xorg udev wayland wlroots python310;
+            xorg udev wayland wlroots python310 libGL;
           inherit (pkgs.python310Packages) cffi pywayland xkbcommon pytestCheckHook;
         in pkgs.python310Packages.buildPythonPackage rec {
           pname = "pywlroots";
@@ -31,7 +31,10 @@
 
           nativeBuildInputs = [ pkg-config ];
           propagatedNativeBuildInputs = [ cffi ];
-          buildInputs = [ libinput libxkbcommon pixman xorg.libxcb xorg.xcbutilwm udev wayland wlroots ];
+          buildInputs = [
+            libinput libxkbcommon pixman xorg.libxcb
+            xorg.xcbutilwm udev wayland wlroots libGL
+          ];
           propagatedBuildInputs = [ cffi pywayland xkbcommon ];
 
           postBuild = ''

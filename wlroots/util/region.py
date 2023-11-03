@@ -51,6 +51,11 @@ class PixmanRegion32(Ptr):
             rects += 1
         return boxes
 
+    @property
+    def extents(self) -> Box:
+        rect = lib.pixman_region32_extents(self._ptr)
+        return Box(rect.x1, rect.y1, rect.x2 - rect.x1, rect.y2 - rect.y1)
+
     def transform(
         self,
         src: PixmanRegion32,
@@ -75,6 +80,13 @@ class PixmanRegion32(Ptr):
         Wrapper around pixman_region32_intersect_rect
         """
         return lib.pixman_region32_intersect_rect(self._ptr, other._ptr, x, y, width, height)
+
+    def union_rect(self, other: PixmanRegion32,
+                   x: int, y: int, width: int, height: int) -> bool:
+        """
+        Wrapper around pixman_region32_union_rect
+        """
+        return lib.pixman_region32_union_rect(self._ptr, other._ptr, x, y, width, height)
 
     def intersect(self, reg1: PixmanRegion32, reg2: PixmanRegion32) -> bool:
         """
